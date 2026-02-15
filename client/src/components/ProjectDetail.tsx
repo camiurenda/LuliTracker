@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Phone, Users, MapPin, Plus, Clock, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Phone, Users, MapPin, Plus, Clock, Trash2, X, CalendarDays } from 'lucide-react'
 import { timeEntryService } from '../services/timeEntryService'
 import type { Project, TimeEntry, ActionType } from '../types'
 
@@ -27,6 +27,8 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
     const [minutes, setMinutes] = useState('')
     const [notes, setNotes] = useState('')
     const [submitting, setSubmitting] = useState(false)
+    const [useCustomDate, setUseCustomDate] = useState(false)
+    const [customDate, setCustomDate] = useState('')
 
     useEffect(() => {
         loadData()
@@ -53,6 +55,8 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
         setHours('')
         setMinutes('')
         setNotes('')
+        setUseCustomDate(false)
+        setCustomDate('')
         setShowForm(true)
     }
 
@@ -74,7 +78,8 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                 project.id,
                 actionType,
                 totalMinutes,
-                notes || undefined
+                notes || undefined,
+                useCustomDate && customDate ? customDate : undefined
             )
             setEntries([entry, ...entries])
             setShowForm(false)
@@ -258,6 +263,33 @@ export default function ProjectDetail({ project, onBack }: ProjectDetailProps) {
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* Custom Date */}
+                                <div>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={useCustomDate}
+                                            onChange={(e) => {
+                                                setUseCustomDate(e.target.checked)
+                                                if (!e.target.checked) setCustomDate('')
+                                            }}
+                                            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <CalendarDays size={16} className="text-gray-500" />
+                                        <span className="text-sm font-medium text-gray-700">Otra fecha</span>
+                                    </label>
+                                    {useCustomDate && (
+                                        <input
+                                            type="date"
+                                            value={customDate}
+                                            onChange={(e) => setCustomDate(e.target.value)}
+                                            max={new Date().toISOString().split('T')[0]}
+                                            className="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                            required
+                                        />
+                                    )}
                                 </div>
 
                                 {/* Notes */}
