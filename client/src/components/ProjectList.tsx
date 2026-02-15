@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Plus, FolderOpen, Trash2, Edit3, X, Check } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { Plus, FolderOpen, Trash2, Edit3, X, Check, MoreVertical, FileSpreadsheet } from 'lucide-react'
 import { projectService } from '../services/projectService'
 import GlobalStats from './GlobalStats'
+import ExportModal from './ExportModal'
 import type { Project } from '../types'
 
 interface ProjectListProps {
@@ -25,6 +26,9 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+    const [exportProject, setExportProject] = useState<Project | null>(null)
+    const menuRef = useRef<HTMLDivElement>(null)
 
     // Form state
     const [name, setName] = useState('')
@@ -33,6 +37,16 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
 
     useEffect(() => {
         loadProjects()
+    }, [])
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpenId(null)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
     const loadProjects = async () => {
@@ -189,10 +203,10 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
                     {projects.map((project) => (
                         <div
                             key={project.id}
-                            className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-all group"
+                            className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all group"
                         >
                             <div
-                                className="h-2"
+                                className="h-2 rounded-t-xl"
                                 style={{ backgroundColor: project.color }}
                             />
                             <div className="p-5">
@@ -203,21 +217,51 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
                                     >
                                         {project.name}
                                     </h3>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="relative" ref={menuOpenId === project.id ? menuRef : undefined}>
                                         <button
-                                            onClick={() => handleEdit(project)}
-                                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                            title="Editar"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setMenuOpenId(menuOpenId === project.id ? null : project.id)
+                                            }}
+                                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
                                         >
-                                            <Edit3 size={16} />
+                                            <MoreVertical size={18} />
                                         </button>
-                                        <button
-                                            onClick={() => handleDelete(project.id)}
-                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                            title="Eliminar"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                        {menuOpenId === project.id && (
+                                            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 animate-in fade-in slide-in-from-top-1">
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuOpenId(null)
+                                                        handleEdit(project)
+                                                    }}
+                                                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                                                >
+                                                    <Edit3 size={15} className="text-gray-400" />
+                                                    Editar
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuOpenId(null)
+                                                        setExportProject(project)
+                                                    }}
+                                                    className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
+                                                >
+                                                    <FileSpreadsheet size={15} className="text-green-500" />
+                                                    Exportar Informe
+                                                </button>
+                                                <div className="border-t border-gray-100 my-1" />
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuOpenId(null)
+                                                        handleDelete(project.id)
+                                                    }}
+                                                    className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                                                >
+                                                    <Trash2 size={15} />
+                                                    Eliminar
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 {project.description && (
@@ -233,6 +277,14 @@ export default function ProjectList({ onSelectProject }: ProjectListProps) {
                         </div>
                     ))}
                 </div>
+            )}
+
+            {/* Export Modal */}
+            {exportProject && (
+                <ExportModal
+                    project={exportProject}
+                    onClose={() => setExportProject(null)}
+                />
             )}
         </div>
     )
