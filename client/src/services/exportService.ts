@@ -9,8 +9,23 @@ export interface ExportOptions {
     dateTo: string
 }
 
+export interface ExportAllOptions {
+    projects: Project[]
+    dateFrom: string
+    dateTo: string
+}
+
 interface EntryRow {
     Fecha: string
+    Actividad: string
+    'Duración (min)': number
+    'Duración (horas)': string
+    Comentario: string
+}
+
+interface MultiEntryRow {
+    Fecha: string
+    Proyecto: string
     Actividad: string
     'Duración (min)': number
     'Duración (horas)': string
@@ -102,6 +117,124 @@ export const exportService = {
         const fromLabel = dateFrom.replace(/-/g, '')
         const toLabel = dateTo.replace(/-/g, '')
         const fileName = `${project.name}_${fromLabel}_${toLabel}.xlsx`
+
+        saveAs(blob, fileName)
+    },
+
+    async exportAllProjectsToXlsx({ projects, dateFrom, dateTo }: ExportAllOptions) {
+        if (projects.length === 0) {
+            throw new Error('No hay proyectos para exportar')
+        }
+
+        const allRows: MultiEntryRow[] = []
+        const projectStats: { project: string; entries: number; minutes: number }[] = []
+        let grandTotalMinutes = 0
+        let grandTotalEntries = 0
+
+        // Fetch entries for all projects
+        for (const project of projects) {
+            const { data: entries, error } = await supabase
+                .from('time_entries')
+                .select('action_type, duration_minutes, notes, entry_date')
+                .eq('project_id', project.id)
+                .gte('entry_date', dateFrom)
+                .lte('entry_date', dateTo)
+                .order('entry_date', { ascending: true })
+
+            if (error) throw error
+            if (!entries || entries.length === 0) continue
+
+            const projectMinutes = entries.reduce((sum, e) => sum + e.duration_minutes, 0)
+            grandTotalMinutes += projectMinutes
+            grandTotalEntries += entries.length
+
+            projectStats.push({
+                project: project.name,
+                entries: entries.length,
+                minutes: projectMinutes,
+            })
+
+            // Add entries for this project
+            const projectRows: MultiEntryRow[] = entries.map(e => ({
+                Fecha: formatDateES(e.entry_date),
+                Proyecto: project.name,
+                Actividad: e.action_type,
+                'Duración (min)': e.duration_minutes,
+                'Duración (horas)': formatHours(e.duration_minutes),
+                Comentario: e.notes || '',
+            }))
+
+            allRows.push(...projectRows)
+        }
+
+        if (allRows.length === 0) {
+            throw new Error('No hay registros en el rango seleccionado')
+        }
+
+        // Sort all rows by date
+        allRows.sort((a, b) => {
+            const dateA = new Date(a.Fecha.split('/').reverse().join('-'))
+            const dateB = new Date(b.Fecha.split('/').reverse().join('-'))
+            return dateA.getTime() - dateB.getTime()
+        })
+
+        // Add total row
+        allRows.push({
+            Fecha: '',
+            Proyecto: '',
+            Actividad: 'TOTAL GENERAL',
+            'Duración (min)': grandTotalMinutes,
+            'Duración (horas)': formatHours(grandTotalMinutes),
+            Comentario: '',
+        })
+
+        // Build workbook
+        const ws = XLSX.utils.json_to_sheet(allRows)
+
+        // Column widths
+        ws['!cols'] = [
+            { wch: 14 },  // Fecha
+            { wch: 20 },  // Proyecto
+            { wch: 16 },  // Actividad
+            { wch: 16 },  // Duración (min)
+            { wch: 16 },  // Duración (horas)
+            { wch: 40 },  // Comentario
+        ]
+
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Registros')
+
+        // Summary by Project sheet
+        const summaryByProjectRows = projectStats.map(stat => ({
+            Proyecto: stat.project,
+            'Cantidad de registros': stat.entries,
+            'Total (min)': stat.minutes,
+            'Total (horas)': formatHours(stat.minutes),
+        }))
+
+        summaryByProjectRows.push({
+            Proyecto: 'TOTAL GENERAL',
+            'Cantidad de registros': grandTotalEntries,
+            'Total (min)': grandTotalMinutes,
+            'Total (horas)': formatHours(grandTotalMinutes),
+        })
+
+        const wsProjectSummary = XLSX.utils.json_to_sheet(summaryByProjectRows)
+        wsProjectSummary['!cols'] = [
+            { wch: 24 },
+            { wch: 20 },
+            { wch: 14 },
+            { wch: 14 },
+        ]
+        XLSX.utils.book_append_sheet(wb, wsProjectSummary, 'Resumen por Proyecto')
+
+        // Generate file
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+        const blob = new Blob([wbout], { type: 'application/octet-stream' })
+
+        const fromLabel = dateFrom.replace(/-/g, '')
+        const toLabel = dateTo.replace(/-/g, '')
+        const fileName = `Informe_General_${fromLabel}_${toLabel}.xlsx`
 
         saveAs(blob, fileName)
     },
